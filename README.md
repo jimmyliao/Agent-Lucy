@@ -49,6 +49,7 @@ Your AI Assistant powered by **Microsoft Agent Framework** and **Azure AI Foundr
 | **Markdown Rendering** | Beautiful formatted responses | ✅ Active |
 | **Multi-user Support** | Separate conversation histories | ✅ Active |
 | **Real-time Chat** | WebSocket and HTTP APIs | ✅ Active |
+| **Authentication** | Secure backend API-based user authentication | ✅ Active |
 
 ### Code Simplification (v1.1.0)
 
@@ -924,6 +925,10 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
 # GitHub MCP (Optional but recommended)
 GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here
 
+# Web App Authentication (Required for production)
+# JSON format: {"username": "password", "user2": "pass2"}
+WEBAPP_AUTH_USERS={"leap":"jimmy","jimmy":"jimmy"}
+
 # Azure AI Project (Legacy - for health check only)
 AZURE_EXISTING_AIPROJECT_ENDPOINT=https://your-project.services.ai.azure.com/...
 ```
@@ -947,6 +952,44 @@ Agent-Lucy/
 ---
 
 ## 📚 API Documentation
+
+### Authentication
+
+```bash
+POST /api/auth/login
+```
+
+**Request**:
+```json
+{
+  "username": "jimmy",
+  "password": "jimmy"
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "token": "FPyyE3zQaSpMNM8Qi4X_TyA6o3SPGBWQjWmmUn0D_eg"
+}
+```
+
+**Response (Failure)**:
+```json
+{
+  "success": false,
+  "message": "Invalid username or password",
+  "token": null
+}
+```
+
+**Authentication Features**:
+- Backend API-based validation (no credentials in frontend)
+- Configurable user list via `.env` (JSON format)
+- Secure token generation for sessions
+- Easy to add/remove users without code changes
 
 ### Health Check
 
