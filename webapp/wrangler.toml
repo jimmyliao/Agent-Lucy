@@ -1,0 +1,20 @@
+name = "agent-lucy-webapp"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+[env.production]
+name = "agent-lucy-webapp"
+
+# Workers configuration for API backend
+[[env.production.services]]
+binding = "API"
+service = "agent-lucy-api"
+
+# Environment variables (set via Cloudflare dashboard or wrangler)
+[env.production.vars]
+AZURE_ENDPOINT = "https://sjliao-8193-resource.services.ai.azure.com/api/projects/sjliao-8193"
+
+# For Cloudflare Workers, you might need to use secrets for sensitive data
+# wrangler secret put AZURE_CLIENT_ID
+# wrangler secret put AZURE_CLIENT_SECRET
+# wrangler secret put AZURE_TENANT_ID
