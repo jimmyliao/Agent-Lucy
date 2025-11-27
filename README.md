@@ -2,15 +2,24 @@
 
 Your AI Assistant powered by **Microsoft Agent Framework** and **Azure AI Foundry**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/jimmyliao/Agent-Lucy/releases/tag/v1.1.0)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/jimmyliao/Agent-Lucy/releases/tag/v1.2.0)
 [![Framework](https://img.shields.io/badge/framework-Microsoft%20Agent%20Framework-green.svg)](https://github.com/microsoft/agent-framework)
 [![MCP](https://img.shields.io/badge/MCP-3%20tools-orange.svg)](https://modelcontextprotocol.io)
 
-> **v1.1.0 Major Update**: Migrated to Microsoft Agent Framework with 51.5% code reduction!
+> **v1.2.0 Major Update**: Backend API Authentication & Deployment Strategy!
 
 ---
 
-## ✨ What's New in v1.1.0
+## ✨ What's New in v1.2.0
+
+- **🔐 Backend API Authentication** - Secure authentication system with token-based sessions
+- **🎯 Flexible User Management** - Configure users via `WEBAPP_AUTH_USERS` environment variable
+- **🚀 Deployment Strategy** - Complete guides for Cloudflare Pages (frontend) + Azure Container Apps (backend)
+- **📋 One-click Deployment** - `make deploy` script for frontend deployment
+- **💰 Cost Analysis** - Transparent pricing: ~$0 (frontend) + ~$37/month (backend)
+- **📚 Enhanced Documentation** - Comprehensive DEPLOYMENT.md guide
+
+### Previous Updates (v1.1.0)
 
 - **Microsoft Agent Framework Integration** - Professional agent orchestration
 - **51.5% Code Reduction** - From 231 lines to 56 lines
@@ -1108,6 +1117,19 @@ MIT License
 ---
 
 ## 📊 Changelog
+
+### v1.2.0 (2025-11-27)
+
+**Major Update**: Backend API Authentication & Deployment Strategy
+
+- ✅ Backend API authentication with token-based sessions
+- ✅ Flexible user management via `WEBAPP_AUTH_USERS` environment variable
+- ✅ Secure credential handling (no hardcoded passwords)
+- ✅ Complete deployment guides (DEPLOYMENT.md)
+- ✅ One-click frontend deployment to Cloudflare Pages
+- ✅ Azure Container Apps backend deployment strategy
+- ✅ Comprehensive cost analysis (~$0 frontend + ~$37/month backend)
+- ✅ Enhanced API documentation
 
 ### v1.1.0 (2025-11-27)
 
