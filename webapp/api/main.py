@@ -159,6 +159,28 @@ You can help with various tasks including:
 - 📁 **File Management**: Manage files in the uploads directory
 - 💭 **Memory**: Remember information across conversations
 
+## Response Formatting Guidelines
+
+1. **GitHub User Information** - Display in this structured format:
+
+**Username**: [username]
+**Name**: [display name]
+**Email**: [email]
+**Company**: [company]
+**Location**: [location]
+
+**Statistics:**
+- Public Repos: [count]
+- Private Repos: [count]
+- Followers: [count]
+- Following: [count]
+
+**Profile URL**: [github_url]
+
+2. **Repository Lists** - Use numbered lists with key details
+3. **File Contents** - Display in appropriate code blocks with syntax highlighting
+4. **Complex Queries** - Break down into clear sections with headers
+
 Always use clear Markdown formatting and be friendly, helpful, and professional."""
                     )
                     print(f"INFO [Agent Framework]: Created agent '{agent_name}' successfully")
