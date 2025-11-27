@@ -125,6 +125,12 @@ async def get_or_create_agent():
             if _agent is None:
                 print("INFO [Agent Framework]: Creating agent with API Key authentication...")
 
+                # Initialize MCP tools first
+                if not mcp_tools:
+                    print("INFO [Agent Framework]: Initializing MCP tools...")
+                    await init_mcp_tools()
+                    print(f"INFO [Agent Framework]: MCP tools initialized: {list(mcp_tools.keys())}")
+
                 # Use AzureOpenAIResponsesClient with API Key
                 from agent_framework.azure import AzureOpenAIResponsesClient
                 from azure.core.credentials import AzureKeyCredential
@@ -146,6 +152,10 @@ async def get_or_create_agent():
                     endpoint=endpoint,
                     deployment_name=deployment
                 )
+
+                # Prepare MCP tools list for agent
+                tools_list = list(mcp_tools.values()) if mcp_tools else []
+                print(f"INFO [Agent Framework]: Registering {len(tools_list)} MCP tools with agent")
 
                 # Create or get agent
                 agent_name = "agent-lucy"
@@ -181,9 +191,10 @@ You can help with various tasks including:
 3. **File Contents** - Display in appropriate code blocks with syntax highlighting
 4. **Complex Queries** - Break down into clear sections with headers
 
-Always use clear Markdown formatting and be friendly, helpful, and professional."""
+Always use clear Markdown formatting and be friendly, helpful, and professional.""",
+                        tools=tools_list  # Register MCP tools with agent
                     )
-                    print(f"INFO [Agent Framework]: Created agent '{agent_name}' successfully")
+                    print(f"INFO [Agent Framework]: Created agent '{agent_name}' successfully with {len(tools_list)} tools")
                 except Exception as e:
                     print(f"INFO [Agent Framework]: Agent exists, getting it... ({e})")
                     _agent = client.get_agent(agent_name)
