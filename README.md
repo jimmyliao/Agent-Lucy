@@ -144,4 +144,4 @@ MIT License
 
 ## 作者
 
-Jimmy Liao <jimmy@leapdesign.ai>
+Jimmy Liao <hi@leapdesign.ai>

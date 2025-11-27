@@ -222,4 +222,4 @@ MIT License
 
 ## 作者
 
-Agent-JimmyLiao <jimmy@leapdesign.ai>
+Agent Lucy <lucy@leapdesign.ai>
