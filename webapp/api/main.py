@@ -36,16 +36,21 @@ except ImportError:
 
 # Agent Framework imports
 try:
-    from agent_framework import ChatAgent, MCPStdioTool
-    from agent_framework.azure import AzureAIAgentClient
-    AGENT_FRAMEWORK_AVAILABLE = True
+    from agent_framework import MCPStdioTool
     MCP_AVAILABLE = True
 except ImportError:
-    AGENT_FRAMEWORK_AVAILABLE = False
     MCP_AVAILABLE = False
+    MCPStdioTool = None
+
+# Optional: Agent Framework (for future use, not required for MCP tools)
+try:
+    from agent_framework import ChatAgent
+    from agent_framework.azure import AzureAIAgentClient
+    AGENT_FRAMEWORK_AVAILABLE = True
+except ImportError:
+    AGENT_FRAMEWORK_AVAILABLE = False
     ChatAgent = None
     AzureAIAgentClient = None
-    MCPStdioTool = None
 
 # Configuration
 AZURE_ENDPOINT = os.getenv(
@@ -172,17 +177,21 @@ async def init_mcp_tools():
 
     tools_status = {}
 
-    # GitHub MCP Tool
+    # GitHub MCP Tool - Official Docker version
     try:
         # Try multiple environment variable names
         github_token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN") or os.getenv("GITHUB_API_KEN") or os.getenv("GITHUB_TOKEN")
         if github_token:
             github_tool = MCPStdioTool(
                 name="github",
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-github"],
-                env={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token},
-                description="GitHub repository operations and file management",
+                command="docker",
+                args=[
+                    "run", "-i", "--rm",
+                    "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",  # 傳遞環境變數到 Docker 容器
+                    "ghcr.io/github/github-mcp-server"
+                ],
+                env={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token},  # 官方版支持 GITHUB_PERSONAL_ACCESS_TOKEN
+                description="Official GitHub MCP Server - Full GitHub API access with authentication",
             )
             mcp_tools["github"] = github_tool
             tools_status["github"] = "configured"
@@ -259,6 +268,39 @@ async def get_mcp_tools_list():
 
     return tools_info
 
+async def convert_mcp_to_openai_functions():
+    """Convert MCP tools to OpenAI function calling format"""
+    if not MCP_AVAILABLE or not mcp_tools:
+        # Initialize MCP tools if not already done
+        await init_mcp_tools()
+
+    if not mcp_tools:
+        return []
+
+    functions = []
+    for tool_name, tool_instance in mcp_tools.items():
+        if tool_instance and hasattr(tool_instance, 'is_connected'):
+            try:
+                if not tool_instance.is_connected:
+                    await tool_instance.connect()
+
+                # 將 MCP tool 的 functions 轉換為 OpenAI format
+                for func in tool_instance.functions:
+                    # Get parameters - might be a property or method
+                    params = func.parameters if not callable(func.parameters) else func.parameters()
+                    functions.append({
+                        "type": "function",
+                        "function": {
+                            "name": f"{tool_name}_{func.name}",
+                            "description": str(func.description) if func.description else "",
+                            "parameters": params if params else {}
+                        }
+                    })
+            except Exception as e:
+                print(f"WARNING: Failed to convert MCP tool {tool_name}: {e}")
+
+    return functions
+
 # API Endpoints
 
 @app.get("/")
@@ -329,7 +371,7 @@ async def chat(request: ChatRequest):
         messages = [
             {"role": "system", "content": """You are Lucy, a helpful AI assistant powered by Azure AI Foundry.
 You can help with various tasks including:
-- Accessing GitHub repositories
+- Accessing GitHub repositories via the GitHub MCP tool (查詢用戶資訊、倉庫、文件內容、Issues、PRs等)
 - Managing files in the uploads directory
 - Remembering information across conversations
 Always be friendly, helpful, and concise in your responses."""}
@@ -342,18 +384,89 @@ Always be friendly, helpful, and concise in your responses."""}
                 "content": msg.content
             })
 
-        # Call Azure OpenAI
+        # 獲取 MCP 工具作為 OpenAI functions
+        tools = await convert_mcp_to_openai_functions()
+
+        # Call Azure OpenAI with tools
         response = await azure_openai_client.chat.completions.create(
             model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4"),
             messages=messages,
+            tools=tools if tools else None,  # 添加工具支持
             temperature=0.7,
             max_tokens=800
         )
 
-        response_text = response.choices[0].message.content
+        # 處理工具調用
+        response_message = response.choices[0].message
+
+        if response_message.tool_calls:
+            # 執行工具調用
+            import json as json_module
+            messages.append({
+                "role": "assistant",
+                "content": response_message.content or "",
+                "tool_calls": [
+                    {
+                        "id": str(tc.id),
+                        "type": str(tc.type) if tc.type else "function",
+                        "function": {"name": str(tc.function.name), "arguments": str(tc.function.arguments)}
+                    }
+                    for tc in response_message.tool_calls
+                ]
+            })
+
+            for tool_call in response_message.tool_calls:
+                # 解析工具名稱 (format: "tool_name_function_name")
+                tool_parts = tool_call.function.name.split("_", 1)
+                tool_name = tool_parts[0]
+                function_name = tool_parts[1] if len(tool_parts) > 1 else tool_call.function.name
+
+                print(f"INFO: Calling MCP tool: {tool_name}.{function_name}")
+
+                # 調用 MCP 工具
+                tool_instance = mcp_tools.get(tool_name)
+                if tool_instance:
+                    import json
+                    args = json.loads(tool_call.function.arguments)
+                    result = await tool_instance.call_tool(function_name, **args)
+
+                    # 處理結果：從 TextContent 提取文本
+                    if result and len(result) > 0:
+                        # result 是 list[Content]，提取文本
+                        result_text = ""
+                        for item in result:
+                            if hasattr(item, 'text'):
+                                result_text += str(item.text)
+                            elif hasattr(item, 'content'):
+                                result_text += str(item.content)
+                            else:
+                                result_text += str(item)
+                    else:
+                        result_text = "No result"
+
+                    # 添加工具結果到消息歷史
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": tool_call.function.name,
+                        "content": result_text
+                    })
+
+            # 再次調用 LLM 處理工具結果
+            second_response = await azure_openai_client.chat.completions.create(
+                model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4"),
+                messages=messages,
+                temperature=0.7,
+                max_tokens=800
+            )
+
+            response_text = second_response.choices[0].message.content
+        else:
+            response_text = response_message.content
+
         thread_id = f"thread_{int(datetime.now().timestamp())}"
 
-        print(f"INFO: Got response: {response_text[:100]}...")
+        print(f"INFO: Got response: {response_text[:100] if response_text else '(empty)'}...")
 
         # Add assistant response to history
         assistant_msg = ChatMessage(
