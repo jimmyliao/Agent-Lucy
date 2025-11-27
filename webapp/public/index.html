@@ -228,6 +228,77 @@
             background: #f0f0f0;
         }
     </style>
+    <!-- Markdown renderer -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Markdown styling */
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            margin-top: 12px;
+            margin-bottom: 8px;
+        }
+
+        .message-content h2 {
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 4px;
+        }
+
+        .message-content h3 {
+            font-size: 16px;
+            color: #667eea;
+        }
+
+        .message-content ul, .message-content ol {
+            margin-left: 20px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+
+        .message-content li {
+            margin: 4px 0;
+        }
+
+        .message-content p {
+            margin: 8px 0;
+        }
+
+        .message-content strong {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .message-content a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .message-content a:hover {
+            text-decoration: underline;
+        }
+
+        .message-content code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .message-content pre {
+            background: #f4f4f4;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .message-content pre code {
+            background: none;
+            padding: 0;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -384,9 +455,14 @@
 
             const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
 
+            // Render markdown for assistant messages, escape HTML for user messages
+            const renderedContent = role === 'assistant'
+                ? marked.parse(content)
+                : escapeHtml(content);
+
             messageDiv.innerHTML = `
                 <div class="message-content">
-                    <div>${escapeHtml(content)}</div>
+                    <div>${renderedContent}</div>
                     <div class="message-time">${time}</div>
                 </div>
             `;
