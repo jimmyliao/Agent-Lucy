@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Jimmy Liao", email = "hi@leapdesign.ai"}
+    {name = "Agent-Lucy", email = "hi@leapdesign.ai"}
 ]
 
 dependencies = [
