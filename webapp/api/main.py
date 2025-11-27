@@ -97,7 +97,11 @@ mcp_tools: Dict[str, any] = {}  # Store active MCP tool instances
 
 # Azure AI Client (Legacy - for health check only)
 credential = DefaultAzureCredential()
-project_client = AIProjectClient(endpoint=AZURE_ENDPOINT, credential=credential)
+try:
+    project_client = AIProjectClient(endpoint=AZURE_ENDPOINT, credential=credential)
+except Exception as e:
+    print(f"WARNING: AIProjectClient init failed: {e}")
+    project_client = None
 
 # Azure OpenAI Client (Simplified approach)
 azure_openai_client = None
@@ -113,46 +117,54 @@ _agent = None
 _agent_lock = asyncio.Lock()
 
 async def get_or_create_agent():
-    """Get or create the ChatAgent instance using Microsoft Agent Framework"""
+    """Get or create Agent using Microsoft Agent Framework with API Key"""
     global _agent
 
     if _agent is None:
         async with _agent_lock:
             if _agent is None:
-                # Prepare MCP tools (if already initialized)
-                tools = []
-                for tool_name, tool_instance in mcp_tools.items():
-                    if tool_instance:
-                        try:
-                            if hasattr(tool_instance, 'is_connected') and not tool_instance.is_connected:
-                                await tool_instance.connect()
-                            tools.append(tool_instance)
-                        except Exception as e:
-                            print(f"WARNING: Failed to connect MCP tool {tool_name}: {e}")
+                print("INFO [Agent Framework]: Creating agent with API Key authentication...")
 
-                # Get Azure OpenAI connection info
-                azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-                azure_openai_key = os.getenv("AZURE_OPENAI_API_KEY")
+                # Use AzureOpenAIResponsesClient with API Key
+                from agent_framework.azure import AzureOpenAIResponsesClient
+                from azure.core.credentials import AzureKeyCredential
 
-                # Create ChatAgent using Microsoft Agent Framework
-                # Use the connection_id from Azure AI Project
-                _agent = ChatAgent(
-                    chat_client=AzureAIAgentClient(
-                        async_credential=credential,
-                        project_endpoint=AZURE_ENDPOINT,
-                        # Try to use connection_id instead of model_deployment_name
-                        connection_id="Default_AzureOpenAI"  # Standard connection name
-                    ),
-                    model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4"),
-                    instructions="""You are Lucy, a helpful AI assistant powered by Azure AI Foundry.
-You can help with various tasks including:
-- Accessing GitHub repositories
-- Managing files in the uploads directory
-- Remembering information across conversations
-Always be friendly, helpful, and concise in your responses.""",
-                    tools=tools if tools else None
+                # Use Azure OpenAI endpoint and API key (not Azure AI Project)
+                api_key = os.getenv("AZURE_OPENAI_API_KEY")
+                endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+                deployment = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4.1")
+
+                if not api_key or not endpoint:
+                    raise ValueError("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be set in .env")
+
+                print(f"INFO [Agent Framework]: Using endpoint: {endpoint}")
+                print(f"INFO [Agent Framework]: Using deployment: {deployment}")
+
+                # Create client with API Key credential
+                client = AzureOpenAIResponsesClient(
+                    credential=AzureKeyCredential(api_key),
+                    endpoint=endpoint,
+                    deployment_name=deployment
                 )
-                print(f"INFO: ChatAgent created successfully with {len(tools)} MCP tools")
+
+                # Create or get agent
+                agent_name = "agent-lucy"
+                try:
+                    _agent = client.create_agent(
+                        name=agent_name,
+                        instructions="""You are Lucy, a helpful AI assistant powered by Azure AI Foundry.
+
+You can help with various tasks including:
+- 🐙 **GitHub Operations**: Query user info, repositories, files, Issues, PRs
+- 📁 **File Management**: Manage files in the uploads directory
+- 💭 **Memory**: Remember information across conversations
+
+Always use clear Markdown formatting and be friendly, helpful, and professional."""
+                    )
+                    print(f"INFO [Agent Framework]: Created agent '{agent_name}' successfully")
+                except Exception as e:
+                    print(f"INFO [Agent Framework]: Agent exists, getting it... ({e})")
+                    _agent = client.get_agent(agent_name)
 
     return _agent
 
@@ -346,11 +358,8 @@ async def list_mcp_tools():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Send a message to agent-lucy using Azure OpenAI"""
+    """Send a message to agent-lucy using Microsoft Agent Framework"""
     try:
-        if not AZURE_OPENAI_AVAILABLE or azure_openai_client is None:
-            raise HTTPException(status_code=500, detail="Azure OpenAI not available")
-
         user_id = request.user_id
 
         # Initialize conversation if needed
@@ -365,146 +374,18 @@ async def chat(request: ChatRequest):
         )
         conversations[user_id].append(user_msg)
 
-        print(f"INFO: Processing message: {request.message[:100]}...")
+        print(f"INFO [Agent Framework]: Processing message: {request.message[:100]}...")
 
-        # Prepare messages for Azure OpenAI
-        messages = [
-            {"role": "system", "content": """You are Lucy, a helpful AI assistant powered by Azure AI Foundry.
+        # 🚀 Use Microsoft Agent Framework - replaces 180 lines with ~10 lines!
+        agent = await get_or_create_agent()
+        response = await agent.run(request.message)
 
-You can help with various tasks including:
-- 🐙 **GitHub Operations**: Query user info, repositories, files, Issues, PRs via GitHub MCP tool
-- 📁 **File Management**: Manage files in the uploads directory
-- 💭 **Memory**: Remember information across conversations
+        # Extract text from AgentRunResponse object
+        response_text = str(response) if response else ""
 
-**Response Formatting Guidelines**:
-1. Use clear Markdown formatting with headers, lists, and emphasis
-2. When showing GitHub user info, use this format:
-   ```
-   ## 👤 GitHub User Profile
+        thread_id = f"thread_af_{int(datetime.now().timestamp())}"
 
-   **Username**: [username]
-   **Name**: [display name]
-   **Email**: [email]
-   **Company**: [company]
-   **Location**: [location]
-
-   ### 📊 Statistics
-   - Public Repos: [count]
-   - Private Repos: [count]
-   - Followers: [count]
-   - Following: [count]
-
-   ### 🔗 Links
-   - Profile: [github url]
-   - Blog: [blog url]
-   ```
-
-3. When listing repositories, use numbered lists with key info:
-   ```
-   ## 📦 Repositories
-
-   1. **[repo-name]** ⭐ [stars]
-      - Description: [desc]
-      - Language: [lang]
-      - 🔗 [url]
-   ```
-
-4. Use emojis sparingly to enhance readability
-5. Keep responses concise but well-structured
-
-Always be friendly, helpful, and professional."""}
-        ]
-
-        # Add conversation history (last 10 messages)
-        for msg in conversations[user_id][-10:]:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
-
-        # 獲取 MCP 工具作為 OpenAI functions
-        tools = await convert_mcp_to_openai_functions()
-
-        # Call Azure OpenAI with tools
-        response = await azure_openai_client.chat.completions.create(
-            model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4"),
-            messages=messages,
-            tools=tools if tools else None,  # 添加工具支持
-            temperature=0.7,
-            max_tokens=800
-        )
-
-        # 處理工具調用
-        response_message = response.choices[0].message
-
-        if response_message.tool_calls:
-            # 執行工具調用
-            import json as json_module
-            messages.append({
-                "role": "assistant",
-                "content": response_message.content or "",
-                "tool_calls": [
-                    {
-                        "id": str(tc.id),
-                        "type": str(tc.type) if tc.type else "function",
-                        "function": {"name": str(tc.function.name), "arguments": str(tc.function.arguments)}
-                    }
-                    for tc in response_message.tool_calls
-                ]
-            })
-
-            for tool_call in response_message.tool_calls:
-                # 解析工具名稱 (format: "tool_name_function_name")
-                tool_parts = tool_call.function.name.split("_", 1)
-                tool_name = tool_parts[0]
-                function_name = tool_parts[1] if len(tool_parts) > 1 else tool_call.function.name
-
-                print(f"INFO: Calling MCP tool: {tool_name}.{function_name}")
-
-                # 調用 MCP 工具
-                tool_instance = mcp_tools.get(tool_name)
-                if tool_instance:
-                    import json
-                    args = json.loads(tool_call.function.arguments)
-                    result = await tool_instance.call_tool(function_name, **args)
-
-                    # 處理結果：從 TextContent 提取文本
-                    if result and len(result) > 0:
-                        # result 是 list[Content]，提取文本
-                        result_text = ""
-                        for item in result:
-                            if hasattr(item, 'text'):
-                                result_text += str(item.text)
-                            elif hasattr(item, 'content'):
-                                result_text += str(item.content)
-                            else:
-                                result_text += str(item)
-                    else:
-                        result_text = "No result"
-
-                    # 添加工具結果到消息歷史
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": tool_call.function.name,
-                        "content": result_text
-                    })
-
-            # 再次調用 LLM 處理工具結果
-            second_response = await azure_openai_client.chat.completions.create(
-                model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4"),
-                messages=messages,
-                temperature=0.7,
-                max_tokens=800
-            )
-
-            response_text = second_response.choices[0].message.content
-        else:
-            response_text = response_message.content
-
-        thread_id = f"thread_{int(datetime.now().timestamp())}"
-
-        print(f"INFO: Got response: {response_text[:100] if response_text else '(empty)'}...")
+        print(f"INFO [Agent Framework]: Got response: {response_text[:100] if response_text else '(empty)'}...")
 
         # Add assistant response to history
         assistant_msg = ChatMessage(
