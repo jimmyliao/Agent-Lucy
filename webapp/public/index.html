@@ -307,14 +307,6 @@
             <h2 style="text-align: center; color: #667eea; margin-bottom: 30px;">🔐 Agent Lucy Login</h2>
             <div id="loginError" style="display: none; background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 20px; text-align: center;"></div>
 
-            <!-- Passcode Login -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Passcode:</label>
-                <input type="password" id="passcodeInput" placeholder="Enter passcode" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px;">
-            </div>
-
-            <div style="text-align: center; margin: 20px 0; color: #999;">- OR -</div>
-
             <!-- Username/Password Login -->
             <div style="margin-bottom: 20px;">
                 <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Username:</label>
@@ -569,12 +561,6 @@
         }
 
         // Authentication System
-        const VALID_CREDENTIALS = {
-            username: 'leap',
-            password: 'jimmy',
-            passcode: 'jimmyliao'
-        };
-
         function checkAuth() {
             const isAuthenticated = localStorage.getItem('agent_lucy_auth') === 'true';
             if (!isAuthenticated) {
@@ -590,9 +576,6 @@
 
             // Setup event listeners
             document.getElementById('loginBtn').onclick = handleLogin;
-            document.getElementById('passcodeInput').onkeypress = (e) => {
-                if (e.key === 'Enter') handleLogin();
-            };
             document.getElementById('usernameInput').onkeypress = (e) => {
                 if (e.key === 'Enter') document.getElementById('passwordInput').focus();
             };
@@ -601,34 +584,54 @@
             };
 
             // Focus on first input
-            document.getElementById('passcodeInput').focus();
+            document.getElementById('usernameInput').focus();
         }
 
-        function handleLogin() {
-            const passcode = document.getElementById('passcodeInput').value;
-            const username = document.getElementById('usernameInput').value;
+        async function handleLogin() {
+            const username = document.getElementById('usernameInput').value.trim();
             const password = document.getElementById('passwordInput').value;
             const errorDiv = document.getElementById('loginError');
+            const loginBtn = document.getElementById('loginBtn');
 
-            // Check passcode or username/password
-            const isValid =
-                (passcode && passcode === VALID_CREDENTIALS.passcode) ||
-                (username && password && username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password);
-
-            if (isValid) {
-                localStorage.setItem('agent_lucy_auth', 'true');
-                document.getElementById('loginModal').style.display = 'none';
-                errorDiv.style.display = 'none';
-                // Reload to initialize app
-                location.reload();
-            } else {
-                errorDiv.textContent = '❌ Invalid credentials. Please try again.';
+            if (!username || !password) {
+                errorDiv.textContent = '❌ Please enter both username and password.';
                 errorDiv.style.display = 'block';
-                // Clear inputs
-                document.getElementById('passcodeInput').value = '';
-                document.getElementById('usernameInput').value = '';
-                document.getElementById('passwordInput').value = '';
-                document.getElementById('passcodeInput').focus();
+                return;
+            }
+
+            // Disable button during API call
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    localStorage.setItem('agent_lucy_auth', 'true');
+                    localStorage.setItem('agent_lucy_token', data.token);
+                    document.getElementById('loginModal').style.display = 'none';
+                    errorDiv.style.display = 'none';
+                    // Reload to initialize app
+                    location.reload();
+                } else {
+                    errorDiv.textContent = '❌ ' + data.message;
+                    errorDiv.style.display = 'block';
+                    // Clear password
+                    document.getElementById('passwordInput').value = '';
+                    document.getElementById('passwordInput').focus();
+                }
+            } catch (error) {
+                errorDiv.textContent = '❌ Login failed: ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
             }
         }
 

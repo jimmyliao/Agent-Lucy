@@ -90,6 +90,26 @@ class ChatResponse(BaseModel):
     thread_id: str
     timestamp: str
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    success: bool
+    message: str
+    token: Optional[str] = None
+
+# Authentication Configuration
+AUTH_USERS = {}
+try:
+    import json
+    auth_users_str = os.getenv("WEBAPP_AUTH_USERS", "{}")
+    AUTH_USERS = json.loads(auth_users_str)
+    print(f"INFO [Auth]: Loaded {len(AUTH_USERS)} authorized users")
+except Exception as e:
+    print(f"WARNING [Auth]: Failed to load WEBAPP_AUTH_USERS: {e}")
+    AUTH_USERS = {"leap": "jimmy"}  # Fallback default
+
 # In-memory storage (for demo - replace with database in production)
 conversations: Dict[str, List[ChatMessage]] = {}
 active_connections: Dict[str, WebSocket] = {}
@@ -373,6 +393,32 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)
         }
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def login(request: LoginRequest):
+    """Authenticate user with username and password"""
+    try:
+        # Check if username exists and password matches
+        if request.username in AUTH_USERS and AUTH_USERS[request.username] == request.password:
+            # Simple token generation (in production, use JWT or similar)
+            import secrets
+            token = secrets.token_urlsafe(32)
+
+            return LoginResponse(
+                success=True,
+                message="Login successful",
+                token=token
+            )
+        else:
+            return LoginResponse(
+                success=False,
+                message="Invalid username or password"
+            )
+    except Exception as e:
+        return LoginResponse(
+            success=False,
+            message=f"Login failed: {str(e)}"
+        )
 
 @app.post("/api/mcp/init")
 async def initialize_mcp_tools():
