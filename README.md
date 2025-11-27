@@ -8,6 +8,8 @@ Your AI Assistant powered by **Microsoft Agent Framework** and **Azure AI Foundr
 
 > **v1.2.0 Major Update**: Backend API Authentication & Deployment Strategy!
 
+**Language**: English | [繁體中文](README.zh-TW.md)
+
 ---
 
 ## ✨ What's New in v1.2.0
